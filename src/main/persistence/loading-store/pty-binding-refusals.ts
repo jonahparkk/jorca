@@ -14,12 +14,23 @@ export type PtyBindingRefusalRequest = {
   mayReviveRetiredSurface?: boolean
 }
 
+/** Which fence stopped the write. Low-cardinality: it lands on the `persistence.pty-binding` span,
+ *  and a refusal with no stated fence is exactly the blind spot this names. */
+export type PtyBindingRefusalReason =
+  | 'source_binding_mismatch'
+  | 'expected_binding_mismatch'
+  | 'closed_tab_tombstone'
+  | 'retired_surface_tombstone'
+  | 'would_create_topology'
+
 /**
  * The five fences a binding must clear before anything is mutated, so a refusal leaves nothing
- * half-written. Order matters: every `false` here is returned before the write path or the
+ * half-written. Order matters: every reason here is returned before the write path or the
  * fast lane can run, which is what the relay's lease expiry and the stable-owner throw rely on.
+ *
+ * Returns the fence that stopped it, or `null` to proceed.
  */
-export function ptyBindingIsRefused(
+export function ptyBindingRefusalReason(
   args: PtyBindingRefusalRequest,
   session: WorkspaceSessionState,
   bindingWorktreeId: string,
@@ -27,11 +38,11 @@ export function ptyBindingIsRefused(
   /** Every host partition: a close is recorded where the tab lived, which need not be where this
    *  binding lands (older relay reattaches left SSH panes in `local`). */
   partitions: readonly TerminalSessionPartition[]
-): boolean {
+): PtyBindingRefusalReason | null {
   if (args.expectedSourceBinding) {
     const expected = args.expectedSourceBinding
     if (expected.tabId !== args.tabId) {
-      return true
+      return 'source_binding_mismatch'
     }
     const sourceTab = session.tabsByWorktree?.[bindingWorktreeId]?.find(
       (candidate) => candidate.id === expected.tabId && candidate.worktreeId === bindingWorktreeId
@@ -45,7 +56,7 @@ export function ptyBindingIsRefused(
       (expected.incarnationId !== undefined &&
         session.terminalPtyIncarnationsByPaneKey?.[sourcePaneKey] !== expected.incarnationId)
     ) {
-      return true
+      return 'source_binding_mismatch'
     }
   }
   if (args.expectedBinding) {
@@ -58,7 +69,7 @@ export function ptyBindingIsRefused(
       boundPtyId !== args.expectedBinding.ptyId ||
       session.terminalPtyIncarnationsByPaneKey?.[paneKey] !== args.expectedBinding.incarnationId
     ) {
-      return true
+      return 'expected_binding_mismatch'
     }
   }
   const existingTab = session.tabsByWorktree?.[bindingWorktreeId]?.find(
@@ -72,7 +83,7 @@ export function ptyBindingIsRefused(
       hasClosedTerminalTabRecord(partition.session.closedTerminalTabTombstonesByTabId, args.tabId)
     )
   ) {
-    return true
+    return 'closed_tab_tombstone'
   }
   // Mirrors the four creating branches of the write path — mint a tab, mint a root leaf, split
   // the root and graft a leaf, mint a layout — each of which sets `terminalMembershipChanged`.
@@ -80,7 +91,7 @@ export function ptyBindingIsRefused(
     args.mayReviveRetiredSurface === false &&
     session.terminalSurfaceTombstonesByPaneKey?.[paneKey]
   ) {
-    return true
+    return 'retired_surface_tombstone'
   }
   if (args.mayCreate === false) {
     const existingLayout = session.terminalLayoutsByTabId?.[args.tabId]
@@ -91,8 +102,8 @@ export function ptyBindingIsRefused(
           !existingLayout.root ||
           !layoutContainsLeafId(existingLayout.root, args.leafId)))
     if (wouldCreateTopology) {
-      return true
+      return 'would_create_topology'
     }
   }
-  return false
+  return null
 }

@@ -2,6 +2,7 @@ import { toSshExecutionHostId } from '../../../shared/execution-host'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import { isTerminalLeafId } from '../../../shared/stable-pane-id'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import { recordSshPtyLeaseLedgerSurvey } from './ssh-pty-lease-ledger-survey'
 import type { SshPtyLeaseOperations } from './ssh-pty-lease-operations'
 
 /**
@@ -198,4 +199,8 @@ export function reconcileSshRemotePtyLeasesForTarget(
   if (changed) {
     operations.flush()
   }
+  // After the reconcile, so the counts describe the ledger this connect will actually route on.
+  recordSshPtyLeaseLedgerSurvey(
+    (operations.state.sshRemotePtyLeases ?? []).filter((lease) => lease.targetId === targetId)
+  )
 }

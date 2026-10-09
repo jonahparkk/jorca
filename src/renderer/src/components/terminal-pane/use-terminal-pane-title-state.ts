@@ -6,7 +6,9 @@ import {
 } from './remote-pane-layout-push'
 import { isTerminalSessionStateSaveFailure } from '../../../../shared/terminal-session-state-save-failure'
 import { AGENT_LAUNCH_PANE_REFUSED_CODE } from '../../../../shared/agent-launch-pane-verdict'
+import { recordRendererCrashBreadcrumb } from '@/lib/crash-breadcrumb-recorder'
 import { appendPaneTerminalError, clearPaneTerminalError } from './terminal-error-accumulation'
+import { classifyTerminalError } from './terminal-error-classification'
 import { stripSshReconnectOwnedErrorLines } from './TerminalErrorToast'
 import { updateTerminalRemoteRuntimeRecoveryUiState } from './terminal-remote-runtime-recovery-ui-state'
 import type { PtyTransportRecoveryState } from './pty-transport-types'
@@ -101,6 +103,12 @@ export function useTerminalPaneTitleState(controller: TerminalPaneFoundation) {
       ? stripSshReconnectOwnedErrorLines(message)
       : message
     if (visibleMessage !== null) {
+      // Every PTY error reaching the UI passes through here; the code is what main's
+      // `ssh.pty-attach-refusal` span correlates against.
+      recordRendererCrashBreadcrumb(
+        'terminal_error_surfaced',
+        classifyTerminalError(visibleMessage)
+      )
       setTerminalErrorsByPaneId((current) =>
         appendPaneTerminalError(current, paneId, visibleMessage)
       )

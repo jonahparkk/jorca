@@ -1,17 +1,7 @@
 import type { SshChannelMultiplexer } from '../ssh/ssh-channel-multiplexer'
 import { isPtyIncarnationId, type PtyIncarnationId } from '../../shared/pty-incarnation'
-import {
-  SSH_PTY_IDENTITY_MISMATCH_ERROR,
-  SSH_PTY_SOURCE_RESTORE_REQUIRED_ERROR,
-  SSH_SESSION_EXPIRED_ERROR,
-  SshPtyAbsentFromRelayError,
-  SshPtyHeldByPreviousRelayError,
-  SshPtyProvenExitedOnRelayError,
-  isSshPtyIdentityMismatchError,
-  isSshPtyNotFoundError
-} from './ssh-pty-errors'
-import { isProvenExitedPtyAttachRefusal } from '../../shared/pty-attach-absence-evidence'
-import { previousRelayMayHoldTerminals } from '../ssh/ssh-previous-relay-terminals'
+import { SSH_PTY_SOURCE_RESTORE_REQUIRED_ERROR, isSshPtyNotFoundError } from './ssh-pty-errors'
+import { throwClassifiedSshPtyAttachRefusal } from './ssh-pty-attach-refusal'
 import { toAppSshPtyId, toRelaySshPtyId } from './ssh-pty-id'
 import type { PtySpawnOptions, PtySpawnResult } from './types'
 import type { SshPtySpawnExitRaceTracker } from './ssh-pty-spawn-exit-race'
@@ -233,26 +223,11 @@ export async function reattachSshPtySession(args: {
     // Why: an expired relay lease must be surfaced distinctly so the renderer clears its binding.
     console.warn(`[ssh-pty] pty.attach FAILED for ${args.sessionId}:`, error)
     if (isSshPtyNotFoundError(error)) {
-      if (isSshPtyIdentityMismatchError(error)) {
-        // The id names a LIVE PTY owned by another pane, so this is not evidence of absence.
-        throw new Error(
-          `${SSH_SESSION_EXPIRED_ERROR}: ${relaySessionId} ${SSH_PTY_IDENTITY_MISMATCH_ERROR}`
-        )
-      }
-      // Why the class: the relay answered for this exact id, so callers holding a pane binding may
-      // retire it and spawn fresh. Plain `SSH_SESSION_EXPIRED` cannot say that — a restarted relay
-      // renumbers from pty-1, so the message alone is indistinguishable from a lost link.
-      //
-      // Why the subclass: the relay marks the one refusal it backed with a pid probe. Without the
-      // marker the answer is the "no such id" union, which is not evidence the shell ended, so the
-      // narrow class is minted only when the relay said so (docs/reference/ssh-execution-boundary.md).
-      if (isProvenExitedPtyAttachRefusal(error)) {
-        throw new SshPtyProvenExitedOnRelayError(`${SSH_SESSION_EXPIRED_ERROR}: ${relaySessionId}`)
-      }
-      if (await previousRelayMayHoldTerminals(args.connectionId)) {
-        throw new SshPtyHeldByPreviousRelayError(relaySessionId)
-      }
-      throw new SshPtyAbsentFromRelayError(`${SSH_SESSION_EXPIRED_ERROR}: ${relaySessionId}`)
+      await throwClassifiedSshPtyAttachRefusal({
+        error,
+        relaySessionId,
+        connectionId: args.connectionId
+      })
     }
     throw error
   }

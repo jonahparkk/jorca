@@ -4,6 +4,7 @@ import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import { isTerminalLeafId } from '../../../shared/stable-pane-id'
 import { invalidateLocalWorktreeMetadataPruneInputs } from '../../local-worktree-metadata-prune-gate'
+import { recordSshPtyLeaseDeletion } from './ssh-pty-lease-deletion-span'
 import { pruneRetiredSshRemotePtyLeaseTombstones } from './ssh-pty-lease-tombstone-retention'
 import { supersedeSiblingLeasesForPane } from './ssh-pty-pane-supersession'
 
@@ -272,6 +273,11 @@ export function removeSshRemotePtyLease(
     (lease) => lease.targetId !== targetId || lease.ptyId !== relayPtyId
   )
   if (operations.state.sshRemotePtyLeases.length !== before) {
+    recordSshPtyLeaseDeletion({
+      reason: 'explicit_single',
+      deleted: leases,
+      retained: operations.state.sshRemotePtyLeases
+    })
     // Why: the lease may have been the last claim on a dangling metadata row (#17775).
     invalidateLocalWorktreeMetadataPruneInputs()
     operations.flush()
@@ -285,10 +291,16 @@ export function removeSshRemotePtyLeases(
   operations.state.sshRemotePtyLeases ??= []
   operations.clearBindingsForTarget(targetId)
   const before = operations.state.sshRemotePtyLeases.length
+  const removed = operations.state.sshRemotePtyLeases.filter((lease) => lease.targetId === targetId)
   operations.state.sshRemotePtyLeases = operations.state.sshRemotePtyLeases.filter(
     (lease) => lease.targetId !== targetId
   )
   if (operations.state.sshRemotePtyLeases.length !== before) {
+    recordSshPtyLeaseDeletion({
+      reason: 'target_teardown',
+      deleted: removed,
+      retained: operations.state.sshRemotePtyLeases
+    })
     // Why: the leases may have been the last claim on dangling metadata rows (#17775).
     invalidateLocalWorktreeMetadataPruneInputs()
     operations.flush()

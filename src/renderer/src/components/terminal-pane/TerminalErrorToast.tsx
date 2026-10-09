@@ -14,6 +14,13 @@ import {
   localizeTerminalSpawnHints,
   withoutTerminalSpawnIssueRequest
 } from './terminal-spawn-error-display'
+import {
+  HELD_BY_PREVIOUS_RELAY_SOURCE,
+  OWNER_HOST_MISMATCH_SOURCE,
+  SOURCE_RESTORE_REQUIRED_SOURCE,
+  TERMINAL_HOST_GONE_SOURCE,
+  UNREATTACHABLE_SESSION_SOURCES
+} from './terminal-error-classification'
 
 const SSH_PREFIX = 'SSH connection is not active'
 // Produced by pty-connection.ts reportError() when a PTY reattach can't reach its SSH host.
@@ -36,33 +43,19 @@ const PANE_OWNER_UNVERIFIED_MARKER = 'terminal_pane_owner_unverified'
 const REMOTE_TERMINAL_CLOSED_MARKER = 'Remote terminal was closed.'
 // Why one source: the test and replace forms must match the same token, and a lone /g regex carries
 // lastIndex state across .test() calls. Capture the leading boundary so replacement can restore it.
-const TERMINAL_HOST_GONE_SOURCE = '(^|[^a-z0-9_])terminal_host_gone(?=$|[^a-z0-9_])'
 const TERMINAL_HOST_GONE_PATTERN = new RegExp(TERMINAL_HOST_GONE_SOURCE)
 const TERMINAL_HOST_GONE_REPLACE_PATTERN = new RegExp(TERMINAL_HOST_GONE_SOURCE, 'g')
 const LEGACY_TERMINAL_HOST_GONE_PATTERN =
   /(^|[^a-z])connect (?:ENOENT|ECONNREFUSED) [^\r\n]*orca-terminal-host-v[^\r\n]*/i
-// A reattach the host answered "no such session" for: the SSH provider's expiry token, the relay's
-// raw not-found string when nothing mapped it, or a daemon generation old enough to still refuse a
-// pane respawning onto an id it is tearing down (#18046). None proves the shell died — the copy
-// says only that this pane lost its session. Same lastIndex hazard as above.
-const UNREATTACHABLE_SESSION_SOURCES = [
-  'SSH_SESSION_EXPIRED:[ \\t]*\\S*(?:[ \\t]+SSH_PTY_IDENTITY_MISMATCH)?',
-  'PTY "[^"\\r\\n]*" not found(?: \\(identity mismatch\\))?',
-  '(?:SessionNotFoundError: )?Session not found: \\S+'
-]
 // The relay answered and proved the shell is still running — only its output delivery was retired.
 // Deliberately NOT one of the sources above: that copy says to open a new terminal, which here
 // abandons a live agent. Same lastIndex hazard, so keep the test and replace forms separate.
-const SOURCE_RESTORE_REQUIRED_SOURCE =
-  'SSH_PTY_SOURCE_RESTORE_REQUIRED(?::[ \\t]*\\S*(?:[ \\t]+\\S+)?)?'
 const SOURCE_RESTORE_REQUIRED_PATTERN = new RegExp(SOURCE_RESTORE_REQUIRED_SOURCE)
 const SOURCE_RESTORE_REQUIRED_REPLACE_PATTERN = new RegExp(SOURCE_RESTORE_REQUIRED_SOURCE, 'g')
 // An older Orca build's relay may still run this terminal, and this build cannot reach it. Not one of
 // the sources above: that copy implies the session is gone.
-const HELD_BY_PREVIOUS_RELAY_SOURCE = 'SSH_PTY_HELD_BY_PREVIOUS_RELAY(?::[ \\t]*\\S*)?'
 const HELD_BY_PREVIOUS_RELAY_PATTERN = new RegExp(HELD_BY_PREVIOUS_RELAY_SOURCE)
 // The pane's saved session is owned by another host connection, e.g. an older build's relay tab.
-const OWNER_HOST_MISMATCH_SOURCE = 'terminal_pane_owner_host_mismatch'
 const OWNER_HOST_MISMATCH_PATTERN = new RegExp(OWNER_HOST_MISMATCH_SOURCE)
 const OWNER_HOST_MISMATCH_REPLACE_PATTERN = new RegExp(OWNER_HOST_MISMATCH_SOURCE, 'g')
 const HELD_BY_PREVIOUS_RELAY_REPLACE_PATTERN = new RegExp(HELD_BY_PREVIOUS_RELAY_SOURCE, 'g')
