@@ -1,5 +1,6 @@
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
+import { recordSshPtyLeaseDeletion } from './ssh-pty-lease-deletion-span'
 
 export type SshPtyLeaseTombstoneRetentionOperations = {
   state: PersistedState
@@ -84,6 +85,11 @@ export function pruneRetiredSshRemotePtyLeaseTombstones(
   if (retained.length === leases.length) {
     return false
   }
+  recordSshPtyLeaseDeletion({
+    reason: 'retired_tombstone',
+    deleted: leases.filter((lease) => !retained.includes(lease)),
+    retained
+  })
   operations.state.sshRemotePtyLeases = retained
   return true
 }

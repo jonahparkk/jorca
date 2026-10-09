@@ -1,5 +1,6 @@
 import { startSpan } from '../../observability/tracer'
 import type { PtyBindingFastLaneMiss } from './pty-binding-fast-lane'
+import type { PtyBindingRefusalReason } from './pty-binding-refusals'
 import type { TerminalPanePlacementAgreement } from '../terminal-topology/terminal-pane-placement-agreement'
 import type { TerminalOwnerConflictReason } from '../terminal-topology/terminal-owner-invariants'
 
@@ -46,6 +47,8 @@ function admitFastLaneSpan(nowMs: number): boolean {
 
 export type PtyBindingSpan = {
   setEligibility(verdict: { eligible: boolean; misses: readonly PtyBindingFastLaneMiss[] }): void
+  /** Which of the five fences stopped the write; a `refused` outcome is otherwise unattributable. */
+  setRefusal(reason: PtyBindingRefusalReason): void
   setPlacement(agreement: TerminalPanePlacementAgreement): void
   /** A binding that breaks a layout invariant (report-only: it is still written). */
   setOwnerConflict(reason: TerminalOwnerConflictReason | 'check_threw'): void
@@ -82,6 +85,9 @@ export function startPtyBindingSpan(entry: {
     setEligibility(verdict) {
       span.setAttribute('binding.eligible', verdict.eligible)
       span.setAttribute('binding.misses', verdict.misses.join(','))
+    },
+    setRefusal(reason) {
+      span.setAttribute('binding.refusal', reason)
     },
     setPlacement(agreement) {
       span.setAttribute('binding.placement', agreement)

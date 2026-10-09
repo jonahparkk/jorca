@@ -13,7 +13,7 @@ import type { StoreRuntimeState } from './store-runtime-state'
 import type { SessionHostPartitionOperations } from './session-host-partitions'
 import { resolveHostId } from './session-host-partitions'
 import { evaluatePtyBindingFastLane } from './pty-binding-fast-lane'
-import { ptyBindingIsRefused } from './pty-binding-refusals'
+import { ptyBindingRefusalReason } from './pty-binding-refusals'
 import { startPtyBindingSpan, type PtyBindingOrigin, type PtyBindingSpan } from './pty-binding-span'
 import { applyPtyBinding } from './pty-binding-session-update'
 import type { TerminalPanePlacement } from '../../../shared/terminal-pane-placement'
@@ -160,7 +160,15 @@ export class PtyBindingPersistenceOperations {
         const partitions = sessions
           .getWorkspaceSessionHostIds()
           .map((hostId) => ({ hostId, session: sessions.getWorkspaceSession(hostId) }))
-        if (ptyBindingIsRefused(args, session, bindingWorktreeId, paneKey, partitions)) {
+        const refusal = ptyBindingRefusalReason(
+          args,
+          session,
+          bindingWorktreeId,
+          paneKey,
+          partitions
+        )
+        if (refusal !== null) {
+          span.setRefusal(refusal)
           outcome = 'refused'
           return { value: false, persist: false }
         }
